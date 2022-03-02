@@ -1,6 +1,6 @@
 from csv import list_dialects
 from flask import Flask, request
-from flask_restful import Resource, Api
+from flask_restful import Resource, Api, reqparse
 from flask_jwt import JWT, jwt_required
 from sqlalchemy import delete
 
@@ -22,6 +22,14 @@ class Items(Resource):
 
 # Creating a resource --> Item /item
 class Item(Resource):
+
+    parser = reqparse.RequestParser()
+    parser.add_argument('price',
+            type = float,
+            required = True,
+            help = "Mandatory argument - cannot be left blank"
+    )
+
     @jwt_required()
     def get(self, name):
         # The filter() function extracts elements from an iterable (list, tuple etc.) for which a function returns True.
@@ -32,8 +40,9 @@ class Item(Resource):
         if next(filter(lambda x: x['name'] == name, items), None):
             return {'message': "An item with name {} already exists".format(name)}, 400 # Bad Request
 
-        data = request.get_json(force=True)
+        data = Item.parser.parse_args()
         price = data['price']
+
         item = {'name':name,'price':price}
         items.append(item)
         return item, 201
@@ -42,6 +51,18 @@ class Item(Resource):
         global items
         items = list(filter(lambda x: x["name"] != name, items))
         return {"message": "items deleted"}
+
+    # Idempotent request, no matter how many times you call this request, output/or what it causes should never change
+    def put(self,name):
+        # check wether the name is in the list
+        data = Item.parser.parse_args()
+        item = next(filter(lambda x: x["name"] == name, items), None)
+        if item is None:
+            item = {"name": name, "price": data["price"]}
+            items.append(item)
+        else:
+            item.update(data)
+        return item            
 
 
 api.add_resource(Item,'/item/<string:name>') # Adding the Resource to the application
